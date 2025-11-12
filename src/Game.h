@@ -1,44 +1,23 @@
 #pragma once
-#include <memory>
-#include <string>
-#include <vector>
-#include <random>
-#include <SDL.h>
-#include <box2d/box2d.h>
 
-class Game {
+class Object {
 public:
-    int run();
-private:
-    bool init();
-    void shutdown();
-    void stepPhysics(float dt);
-    void render();
-    void spawnRandomBlock();
-    bool loadConfig(const std::string& path);
-
-    SDL_Window* window_ = nullptr;
-    SDL_Renderer* renderer_ = nullptr;
-    SDL_Texture* blockTexture_ = nullptr;
-
-    b2WorldId worldId_ = b2_nullWorldId;
+    // Constructor with position and size parameters
+    Object(float x, float y, float width, float height);
+    virtual ~Object();
     
-    struct FallingBlock {
-        b2BodyId bodyId;
-        SDL_Color color;
-    };
-    std::vector<FallingBlock> fallingBlocks_;
-    b2BodyId groundId_ = b2_nullBodyId;
+    // Core object methods
+    virtual void update();
+    virtual void render();
 
-    float gravityY_ = 9.8f;
-    std::string title_ = "Falling Blocks";
-    std::mt19937 rng_;
-    float spawnTimer_ = 0.0f;
-    float spawnInterval_ = 0.5f; // Spawn rate from config
-    float boxSize_ = 0.5f; // Box size from config
-    
-    // Rendering constants
-    static constexpr int SCREEN_WIDTH = 800;
-    static constexpr int SCREEN_HEIGHT = 600;
-    static constexpr float PIXELS_PER_METER = 50.0f; // Scale factor
+    float getX(){return x;}
+    float getY(){return y;}
+    float getWidth(){return width;}
+    float getHeight(){return height;}
+    void setX(float x){this->x = x;}
+    void setY(float y){this->y = y;}
+ private:   
+
+    float x, y;        // Position
+    float width, height; // Size
 };
