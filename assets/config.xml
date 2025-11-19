@@ -1,1 +1,1 @@
-<DemoConfig title="Hello SDL2 + Box2D + tinyxml2" gravityY="9.8" spawnRate="3000.0" boxSize=".1" />
+<DemoConfig title="Squirrel Acorn Game" squirrelSpeed="300.0" acornSpeed="400.0" leafSpeedX="200.0" leafSpeedY="150.0" />

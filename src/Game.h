@@ -2,9 +2,10 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <random>
 #include <SDL.h>
-#include <box2d/box2d.h>
+#include "Squirrel.h"
+#include "Acorn.h"
+#include "Leaf.h"
 
 class Game {
 public:
@@ -12,33 +13,36 @@ public:
 private:
     bool init();
     void shutdown();
-    void stepPhysics(float dt);
+    void update(float dt);
     void render();
-    void spawnRandomBlock();
+    void handleInput();
     bool loadConfig(const std::string& path);
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
-    SDL_Texture* blockTexture_ = nullptr;
+    SDL_Texture* squirrelTexture_ = nullptr;
+    SDL_Texture* acornTexture_ = nullptr;
+    SDL_Texture* leafTexture_ = nullptr;
 
-    b2WorldId worldId_ = b2_nullWorldId;
-    
-    struct FallingBlock {
-        b2BodyId bodyId;
-        SDL_Color color;
-    };
-    std::vector<FallingBlock> fallingBlocks_;
-    b2BodyId groundId_ = b2_nullBodyId;
+    std::unique_ptr<Squirrel> squirrel_;
+    std::vector<std::unique_ptr<Acorn>> acorns_;
+    std::unique_ptr<Leaf> leaf_;
 
-    float gravityY_ = 9.8f;
-    std::string title_ = "Falling Blocks";
-    std::mt19937 rng_;
-    float spawnTimer_ = 0.0f;
-    float spawnInterval_ = 0.5f; // Spawn rate from config
-    float boxSize_ = 0.5f; // Box size from config
+    // Configuration values
+    float squirrelSpeed_ = 300.0f;
+    float acornSpeed_ = 400.0f;
+    float acornWidth_ = 30.0f;
+    float acornHeight_ = 30.0f;
+    float leafSpeedX_ = 200.0f;
+    float leafSpeedY_ = 150.0f;
+
+    float acornCooldown_ = 0.0f;
+    static constexpr float ACORN_COOLDOWN_TIME = 1.0f;
+
+    int score_ = 0;
+    std::string title_ = "Squirrel Acorn Game";
     
     // Rendering constants
     static constexpr int SCREEN_WIDTH = 800;
     static constexpr int SCREEN_HEIGHT = 600;
-    static constexpr float PIXELS_PER_METER = 50.0f; // Scale factor
 };

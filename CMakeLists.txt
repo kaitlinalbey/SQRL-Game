@@ -19,39 +19,20 @@ add_executable(
     demo 
     src/main.cpp 
     src/Game.h
-    src/Game.cpp 
-    src/Player.h
-    src/Player.cpp
-    src/Engine.h
-    src/Engine.cpp
-    src/ImageDevice.h
-    src/ImageDevice.cpp
-    src/InputDevice.cpp
-    src/InputDevice.h
-    src/Object.cpp
-    src/Object.h
-    src/Wall.h
-    src/Wall.cpp
-    src/Key.h
-    src/Key.cpp
-    src/Door.h
-    src/Door.cpp
-    src/Camera.h
-    src/Camera.cpp
-    src/ColorPuzzle.h
-    src/ColorPuzzle.cpp
+    src/Game.cpp
+    src/Squirrel.h
+    src/Squirrel.cpp
+    src/Acorn.h
+    src/Acorn.cpp
+    src/Leaf.h
+    src/Leaf.cpp
 )
 
 # Link libraries
 target_link_libraries(demo PRIVATE
     SDL2::SDL2
-    SDL2_ttf::SDL2_ttf
     SDL2_image::SDL2_image
-    SDL2_mixer::SDL2_mixer
-    box2d::box2d
     tinyxml2::tinyxml2
-    yaml-cpp::yaml-cpp
-    nlohmann_json::nlohmann_json
 )
 
 # Define SDL_MAIN_HANDLED for MinGW

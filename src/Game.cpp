@@ -1,12 +1,12 @@
 #include "Game.h"
 #include <SDL.h>
-#include <box2d/box2d.h>
+#include <SDL_image.h>
 #include <tinyxml2.h>
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <random>
 #include <cmath>
+#include <algorithm>
 
 using namespace std::chrono_literals;
 
@@ -19,33 +19,27 @@ int Game::run() {
         return 1;
     }
 
-    auto start = std::chrono::steady_clock::now();
-    float accumulator = 0.0f;
-    const float dt = 1.0f / 60.0f;
+    auto lastTime = std::chrono::steady_clock::now();
     bool running = true;
 
     while (running) {
+        auto currentTime = std::chrono::steady_clock::now();
+        float dt = std::chrono::duration<float>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        // Cap dt to prevent large jumps
+        if (dt > 0.1f) dt = 0.1f;
+
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = false;
         }
 
-        accumulator += dt;
-        while (accumulator >= dt) {
-            stepPhysics(dt);
-            accumulator -= dt;
-        }
-
-        // Spawn blocks at intervals
-        spawnTimer_ += dt;
-        if (spawnTimer_ >= spawnInterval_) {
-            spawnRandomBlock();
-            spawnTimer_ = 0.0f;
-        }
-
+        handleInput();
+        update(dt);
         render();
 
-        std::this_thread::sleep_for(10ms);
+        std::this_thread::sleep_for(16ms); // ~60 FPS
     }
 
     shutdown();
@@ -61,13 +55,11 @@ bool Game::loadConfig(const std::string& path) {
     auto* root = doc.RootElement();
     if (!root) return false;
     if (const char* t = root->Attribute("title")) title_ = t;
-    root->QueryFloatAttribute("gravityY", &gravityY_);
-    float spawnRate;
-    root->QueryFloatAttribute("spawnRate", &spawnRate);
-    spawnInterval_ = 1.0f / spawnRate; // Convert spawns per second to seconds between spawns
-    root->QueryFloatAttribute("boxSize", &boxSize_);
-    std::cout << "Loaded config: title=\"" << title_ << "\" gravityY=" << gravityY_ 
-              << " spawnRate=" << spawnRate << " spawnInterval=" << spawnInterval_ << " boxSize=" << boxSize_ << "\n";
+    root->QueryFloatAttribute("squirrelSpeed", &squirrelSpeed_);
+    root->QueryFloatAttribute("acornSpeed", &acornSpeed_);
+    root->QueryFloatAttribute("leafSpeedX", &leafSpeedX_);
+    root->QueryFloatAttribute("leafSpeedY", &leafSpeedY_);
+    std::cout << "Loaded config: title=\"" << title_ << "\"\n";
     return true;
 }
 
@@ -76,6 +68,14 @@ bool Game::init() {
         std::cerr << "SDL_Init error: " << SDL_GetError() << "\n";
         return false;
     }
+
+    // Initialize SDL_image
+    int imgFlags = IMG_INIT_PNG | IMG_INIT_WEBP;
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
+        std::cerr << "SDL_image init error: " << IMG_GetError() << "\n";
+        return false;
+    }
+
     window_ = SDL_CreateWindow(title_.c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
@@ -90,134 +90,152 @@ bool Game::init() {
         return false;
     }
 
-    // Create world with gravity (negative Y pulls downward in Box2D)
-    b2WorldDef worldDef = b2DefaultWorldDef();
-    worldDef.gravity = B2_LITERAL(b2Vec2){0.0f, -gravityY_};
-    worldId_ = b2CreateWorld(&worldDef);
+    // Load textures
+    SDL_Surface* squirrelSurf = IMG_Load("assets/SQRL.png");
+    if (squirrelSurf) {
+        squirrelTexture_ = SDL_CreateTextureFromSurface(renderer_, squirrelSurf);
+        SDL_FreeSurface(squirrelSurf);
+    } else {
+        std::cerr << "Failed to load SQRL.png: " << IMG_GetError() << "\n";
+    }
 
-    // Create ground body - position it below where the box will fall
-    b2BodyDef groundDef = b2DefaultBodyDef();
-    groundDef.position = B2_LITERAL(b2Vec2){0.0f, -4.0f}; // Ground at y=-4 (moved down)
-    groundId_ = b2CreateBody(worldId_, &groundDef);
-    
-    b2ShapeDef groundShapeDef = b2DefaultShapeDef();
-    b2Polygon groundBox = b2MakeBox(50.0f, 1.0f);
-    b2CreatePolygonShape(groundId_, &groundShapeDef, &groundBox);
+    SDL_Surface* acornSurf = IMG_Load("assets/acorn.png");
+    if (acornSurf) {
+        acornTexture_ = SDL_CreateTextureFromSurface(renderer_, acornSurf);
+        SDL_FreeSurface(acornSurf);
+    } else {
+        std::cerr << "Failed to load acorn.png: " << IMG_GetError() << "\n";
+    }
 
-    // Initialize random number generator
-    rng_.seed(std::chrono::steady_clock::now().time_since_epoch().count());
-    
-    // Create block texture once
-    int blockSize = static_cast<int>(boxSize_ * PIXELS_PER_METER);
-    blockTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, 
-                                    SDL_TEXTUREACCESS_TARGET, blockSize, blockSize);
-    if (!blockTexture_) {
-        std::cerr << "Failed to create block texture: " << SDL_GetError() << "\n";
+    SDL_Surface* leafSurf = IMG_Load("assets/leaf.webp");
+    if (leafSurf) {
+        leafTexture_ = SDL_CreateTextureFromSurface(renderer_, leafSurf);
+        SDL_FreeSurface(leafSurf);
+    } else {
+        std::cerr << "Failed to load leaf.webp: " << IMG_GetError() << "\n";
+        // Create a simple colored rectangle as fallback for leaf
+        leafTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
+            SDL_TEXTUREACCESS_TARGET, 60, 60);
+        if (leafTexture_) {
+            SDL_SetRenderTarget(renderer_, leafTexture_);
+            SDL_SetRenderDrawColor(renderer_, 34, 139, 34, 255); // Forest green
+            SDL_RenderClear(renderer_);
+            SDL_SetRenderTarget(renderer_, nullptr);
+        }
+    }
+
+    if (!squirrelTexture_ || !acornTexture_ || !leafTexture_) {
+        std::cerr << "Failed to load required textures\n";
         return false;
     }
+
+    // Create game objects
+    squirrel_ = std::make_unique<Squirrel>(400.0f, 50.0f, 80.0f, 80.0f, squirrelSpeed_);
+    leaf_ = std::make_unique<Leaf>(400.0f, 500.0f, 60.0f, 60.0f, leafSpeedX_, leafSpeedY_);
     
-    // Draw the block pattern onto the texture
-    SDL_SetRenderTarget(renderer_, blockTexture_);
-    SDL_SetRenderDrawColor(renderer_, 255, 100, 100, 255); // Red
-    SDL_RenderClear(renderer_);
-    SDL_SetRenderTarget(renderer_, nullptr);
-    
-    std::cout << "Init complete. Falling blocks will spawn randomly.\n";
+    std::cout << "Init complete. Squirrel Acorn Game ready!\n";
     return true;
 }
 
 void Game::shutdown() {
-    if (B2_IS_NON_NULL(worldId_)) {
-        b2DestroyWorld(worldId_);
-        worldId_ = b2_nullWorldId;
-    }
-    if (blockTexture_) { SDL_DestroyTexture(blockTexture_); blockTexture_ = nullptr; }
+    if (squirrelTexture_) { SDL_DestroyTexture(squirrelTexture_); squirrelTexture_ = nullptr; }
+    if (acornTexture_) { SDL_DestroyTexture(acornTexture_); acornTexture_ = nullptr; }
+    if (leafTexture_) { SDL_DestroyTexture(leafTexture_); leafTexture_ = nullptr; }
     if (renderer_) { SDL_DestroyRenderer(renderer_); renderer_ = nullptr; }
     if (window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
+    IMG_Quit();
     SDL_Quit();
 }
 
-void Game::stepPhysics(float dt) {
-    b2World_Step(worldId_, dt, 6);
+void Game::handleInput() {
+    const Uint8* keyState = SDL_GetKeyboardState(nullptr);
+    
+    float dt = 1.0f / 60.0f;
+    
+    // Move squirrel left/right
+    if (keyState[SDL_SCANCODE_LEFT] || keyState[SDL_SCANCODE_A]) {
+        squirrel_->moveLeft(dt);
+    }
+    if (keyState[SDL_SCANCODE_RIGHT] || keyState[SDL_SCANCODE_D]) {
+        squirrel_->moveRight(dt);
+    }
+
+    // Shoot acorn with W key or Up arrow
+    if (keyState[SDL_SCANCODE_W] || keyState[SDL_SCANCODE_UP]) {
+        if (acornCooldown_ <= 0.0f) {
+            float acornX = squirrel_->getX() + squirrel_->getWidth() / 2 - acornWidth_ / 2;
+            float acornY = squirrel_->getY() + squirrel_->getHeight();
+            acorns_.push_back(std::make_unique<Acorn>(acornX, acornY, acornWidth_, acornHeight_, acornSpeed_));
+            acornCooldown_ = ACORN_COOLDOWN_TIME;
+        }
+    }
+}
+
+void Game::update(float dt) {
+    // Update cooldown timer
+    if (acornCooldown_ > 0.0f) {
+        acornCooldown_ -= dt;
+    }
+
+    // Update squirrel
+    squirrel_->update(dt, SCREEN_WIDTH);
+
+    // Update acorns
+    for (auto& acorn : acorns_) {
+        if (acorn->isActive()) {
+            acorn->update(dt);
+            
+            // Check collision with leaf
+            if (acorn->getX() < leaf_->getX() + leaf_->getWidth() &&
+                acorn->getX() + acorn->getWidth() > leaf_->getX() &&
+                acorn->getY() < leaf_->getY() + leaf_->getHeight() &&
+                acorn->getY() + acorn->getHeight() > leaf_->getY()) {
+                acorn->setActive(false);
+                score_++;
+                std::cout << "Hit! Score: " << score_ << "\n";
+            }
+            
+            // Deactivate if off screen
+            if (acorn->isOffScreen(SCREEN_HEIGHT)) {
+                acorn->setActive(false);
+            }
+        }
+    }
+
+    // Remove inactive acorns
+    acorns_.erase(
+        std::remove_if(acorns_.begin(), acorns_.end(), 
+            [](const std::unique_ptr<Acorn>& a) { return !a->isActive(); }),
+        acorns_.end()
+    );
+
+    // Update leaf
+    leaf_->update(dt, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
 void Game::render() {
-    // Clear screen with dark blue background
-    SDL_SetRenderDrawColor(renderer_, 20, 20, 30, 255);
+    // Clear screen with sky blue background
+    SDL_SetRenderDrawColor(renderer_, 135, 206, 235, 255);
     SDL_RenderClear(renderer_);
 
-    // Simple coordinate conversion: Box2D world to screen pixels
-    // Screen center is at (400, 300), Box2D origin is at (0, 0)
-    auto worldToScreen = [this](b2Vec2 worldPos) -> SDL_Point {
-        SDL_Point screenPos;
-        screenPos.x = static_cast<int>(SCREEN_WIDTH/2 + worldPos.x * PIXELS_PER_METER);
-        screenPos.y = static_cast<int>(SCREEN_HEIGHT/2 - worldPos.y * PIXELS_PER_METER); // Flip Y axis
-        return screenPos;
-    };
+    // Draw brown branch at top
+    SDL_SetRenderDrawColor(renderer_, 139, 69, 19, 255);
+    SDL_Rect branch = {0, static_cast<int>(squirrel_->getY() + squirrel_->getHeight()), SCREEN_WIDTH, 20};
+    SDL_RenderFillRect(renderer_, &branch);
 
-    // Draw ground (static rectangle) - positioned at y=-4, size 100x2
-    SDL_SetRenderDrawColor(renderer_, 100, 100, 100, 255); // Gray
-    SDL_Rect groundRect;
-    groundRect.x = SCREEN_WIDTH/2 - static_cast<int>(50.0f * PIXELS_PER_METER); // Center the 100m wide ground
-    groundRect.y = SCREEN_HEIGHT/2 + static_cast<int>((4.0f - 1.0f) * PIXELS_PER_METER); // Ground center at y=-4, top edge at y=-5
-    groundRect.w = static_cast<int>(100.0f * PIXELS_PER_METER); // 100m wide
-    groundRect.h = static_cast<int>(2.0f * PIXELS_PER_METER); // 2m tall
-    SDL_RenderFillRect(renderer_, &groundRect);
+    // Draw squirrel
+    squirrel_->render(renderer_, squirrelTexture_);
 
-    // Draw all falling blocks with rotation using color modulation
-    for (const auto& block : fallingBlocks_) {
-        if (B2_IS_NON_NULL(block.bodyId)) {
-            b2Vec2 blockPos = b2Body_GetPosition(block.bodyId);
-            b2Transform transform = b2Body_GetTransform(block.bodyId);
-            
-            // Convert Box2D transform to screen coordinates
-            int centerX = SCREEN_WIDTH/2 + static_cast<int>(blockPos.x * PIXELS_PER_METER);
-            int centerY = SCREEN_HEIGHT/2 - static_cast<int>(blockPos.y * PIXELS_PER_METER);
-            
-            // Get rotation angle from transform (convert to degrees for SDL)
-            float angle = atan2(transform.q.s, transform.q.c) * 180.0f / 3.14159f;
-            
-            // Set color modulation for this block
-            SDL_SetTextureColorMod(blockTexture_, block.color.r, block.color.g, block.color.b);
-            
-            // Draw the rotated texture with color modulation
-            int blockSize = static_cast<int>(boxSize_ * PIXELS_PER_METER);
-            SDL_Rect destRect = {centerX - blockSize/2, centerY - blockSize/2, blockSize, blockSize};
-            SDL_RenderCopyEx(renderer_, blockTexture_, nullptr, &destRect, angle, nullptr, SDL_FLIP_NONE);
-        }
+    // Draw acorns
+    for (const auto& acorn : acorns_) {
+        acorn->render(renderer_, acornTexture_);
     }
+
+    // Draw leaf
+    leaf_->render(renderer_, leafTexture_);
 
     // Present the rendered frame
     SDL_RenderPresent(renderer_);
 }
 
-void Game::spawnRandomBlock() {
-    // Random X position between -8 and 8 (screen width coverage)
-    std::uniform_real_distribution<float> xDist(-8.0f, 8.0f);
-    std::uniform_int_distribution<int> colorDist(0, 255);
-    
-    float x = xDist(rng_);
-    
-    // Generate random color
-    SDL_Color blockColor = {
-        static_cast<Uint8>(colorDist(rng_)), // Red
-        static_cast<Uint8>(colorDist(rng_)), // Green  
-        static_cast<Uint8>(colorDist(rng_)), // Blue
-        255 // Alpha (fully opaque)
-    };
-    
-    // Create falling block at top of screen
-    b2BodyDef bodyDef = b2DefaultBodyDef();
-    bodyDef.type = b2_dynamicBody;
-    bodyDef.position = B2_LITERAL(b2Vec2){x, 8.0f}; // Start at top
-    b2BodyId blockId = b2CreateBody(worldId_, &bodyDef);
-    
-    b2ShapeDef dynamicShapeDef = b2DefaultShapeDef();
-    dynamicShapeDef.density = 1.0f;
-    dynamicShapeDef.material.restitution = 0.3f; // Add some bounciness
-    b2Polygon dynamicBox = b2MakeBox(boxSize_/2.0f, boxSize_/2.0f); // b2MakeBox uses half-width/half-height
-    b2CreatePolygonShape(blockId, &dynamicShapeDef, &dynamicBox);
-    
-    // Store block with its color
-    fallingBlocks_.push_back({blockId, blockColor});
-}
+
