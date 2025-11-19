@@ -18,16 +18,28 @@ find_package(nlohmann_json CONFIG REQUIRED)
 add_executable(
     demo 
     src/main.cpp 
-    src/Object.h
-    src/Object.cpp 
+    src/Game.h
+    src/Game.cpp 
+    src/Player.h
+    src/Player.cpp
     src/Engine.h
-    src/Engine.cpp 
+    src/Engine.cpp
     src/ImageDevice.h
     src/ImageDevice.cpp
-    src/Dude.h
-    src/Dude.cpp
-    src/InputDevice.h
     src/InputDevice.cpp
+    src/InputDevice.h
+    src/Object.cpp
+    src/Object.h
+    src/Wall.h
+    src/Wall.cpp
+    src/Key.h
+    src/Key.cpp
+    src/Door.h
+    src/Door.cpp
+    src/Camera.h
+    src/Camera.cpp
+    src/ColorPuzzle.h
+    src/ColorPuzzle.cpp
 )
 
 # Link libraries
