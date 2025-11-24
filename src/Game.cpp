@@ -1,6 +1,7 @@
 #include "Game.h"
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 #include <tinyxml2.h>
 #include <iostream>
 #include <thread>
@@ -76,6 +77,19 @@ bool Game::init() {
         return false;
     }
 
+    // Initialize SDL_ttf
+    if (TTF_Init() == -1) {
+        std::cerr << "SDL_ttf init error: " << TTF_GetError() << "\n";
+        return false;
+    }
+
+    // Try to load a system font (simplified approach)
+    font_ = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", 24);
+    if (!font_) {
+        std::cerr << "Failed to load font: " << TTF_GetError() << "\n";
+        // Continue anyway, we'll handle null font in drawText
+    }
+
     window_ = SDL_CreateWindow(title_.c_str(),
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
@@ -107,21 +121,12 @@ bool Game::init() {
         std::cerr << "Failed to load acorn.png: " << IMG_GetError() << "\n";
     }
 
-    SDL_Surface* leafSurf = IMG_Load("assets/leaf.webp");
+    SDL_Surface* leafSurf = IMG_Load("assets/leaf.png");
     if (leafSurf) {
         leafTexture_ = SDL_CreateTextureFromSurface(renderer_, leafSurf);
         SDL_FreeSurface(leafSurf);
     } else {
-        std::cerr << "Failed to load leaf.webp: " << IMG_GetError() << "\n";
-        // Create a simple colored rectangle as fallback for leaf
-        leafTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888,
-            SDL_TEXTUREACCESS_TARGET, 60, 60);
-        if (leafTexture_) {
-            SDL_SetRenderTarget(renderer_, leafTexture_);
-            SDL_SetRenderDrawColor(renderer_, 34, 139, 34, 255); // Forest green
-            SDL_RenderClear(renderer_);
-            SDL_SetRenderTarget(renderer_, nullptr);
-        }
+        std::cerr << "Failed to load leaf.png: " << IMG_GetError() << "\n";
     }
 
     if (!squirrelTexture_ || !acornTexture_ || !leafTexture_) {
@@ -131,18 +136,20 @@ bool Game::init() {
 
     // Create game objects
     squirrel_ = std::make_unique<Squirrel>(400.0f, 50.0f, 80.0f, 80.0f, squirrelSpeed_);
-    leaf_ = std::make_unique<Leaf>(400.0f, 500.0f, 60.0f, 60.0f, leafSpeedX_, leafSpeedY_);
+    leaf_ = std::make_unique<Leaf>(400.0f, 500.0f, 90.0f, 90.0f, leafSpeedX_, leafSpeedY_);
     
     std::cout << "Init complete. Squirrel Acorn Game ready!\n";
     return true;
 }
 
 void Game::shutdown() {
+    if (font_) { TTF_CloseFont(font_); font_ = nullptr; }
     if (squirrelTexture_) { SDL_DestroyTexture(squirrelTexture_); squirrelTexture_ = nullptr; }
     if (acornTexture_) { SDL_DestroyTexture(acornTexture_); acornTexture_ = nullptr; }
     if (leafTexture_) { SDL_DestroyTexture(leafTexture_); leafTexture_ = nullptr; }
     if (renderer_) { SDL_DestroyRenderer(renderer_); renderer_ = nullptr; }
     if (window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
+    TTF_Quit();
     IMG_Quit();
     SDL_Quit();
 }
@@ -161,12 +168,18 @@ void Game::handleInput() {
     }
 
     // Shoot acorn with W key or Up arrow
-    if (keyState[SDL_SCANCODE_W] || keyState[SDL_SCANCODE_UP]) {
-        if (acornCooldown_ <= 0.0f) {
+    if (!gameOver_ && !gameWon_ && (keyState[SDL_SCANCODE_W] || keyState[SDL_SCANCODE_UP])) {
+        if (acornCooldown_ <= 0.0f && nutsRemaining_ > 0) {
             float acornX = squirrel_->getX() + squirrel_->getWidth() / 2 - acornWidth_ / 2;
             float acornY = squirrel_->getY() + squirrel_->getHeight();
             acorns_.push_back(std::make_unique<Acorn>(acornX, acornY, acornWidth_, acornHeight_, acornSpeed_));
             acornCooldown_ = ACORN_COOLDOWN_TIME;
+            nutsRemaining_--;
+            
+            if (nutsRemaining_ <= 0) {
+                gameOver_ = true;
+                std::cout << "Game Over! You ran out of nuts!\n";
+            }
         }
     }
 }
@@ -185,14 +198,33 @@ void Game::update(float dt) {
         if (acorn->isActive()) {
             acorn->update(dt);
             
-            // Check collision with leaf
-            if (acorn->getX() < leaf_->getX() + leaf_->getWidth() &&
-                acorn->getX() + acorn->getWidth() > leaf_->getX() &&
-                acorn->getY() < leaf_->getY() + leaf_->getHeight() &&
-                acorn->getY() + acorn->getHeight() > leaf_->getY()) {
+            // Check collision with leaf (smaller hitbox - 60% of actual size)
+            float leafHitboxShrink = 0.2f;
+            float leafHitX = leaf_->getX() + leaf_->getWidth() * leafHitboxShrink;
+            float leafHitY = leaf_->getY() + leaf_->getHeight() * leafHitboxShrink;
+            float leafHitW = leaf_->getWidth() * (1.0f - 2 * leafHitboxShrink);
+            float leafHitH = leaf_->getHeight() * (1.0f - 2 * leafHitboxShrink);
+            
+            if (acorn->getX() < leafHitX + leafHitW &&
+                acorn->getX() + acorn->getWidth() > leafHitX &&
+                acorn->getY() < leafHitY + leafHitH &&
+                acorn->getY() + acorn->getHeight() > leafHitY) {
                 acorn->setActive(false);
+                hits_++;
                 score_++;
-                std::cout << "Hit! Score: " << score_ << "\n";
+                std::cout << "Hit! Points: " << hits_ << "/" << HITS_TO_WIN << "\n";
+                
+                if (hits_ >= HITS_TO_WIN) {
+                    gameWon_ = true;
+                    std::cout << "You Win! You hit the leaf " << HITS_TO_WIN << " times!\n";
+                } else {
+                    // Respawn leaf at random position in bottom half
+                    float newX = static_cast<float>(rand() % (SCREEN_WIDTH - 90));
+                    float newY = static_cast<float>((SCREEN_HEIGHT / 2) + rand() % (SCREEN_HEIGHT / 2 - 90));
+                    float newSpeedX = (rand() % 2 == 0 ? 1 : -1) * (150.0f + rand() % 100);
+                    float newSpeedY = (rand() % 2 == 0 ? 1 : -1) * (100.0f + rand() % 100);
+                    leaf_ = std::make_unique<Leaf>(newX, newY, 90.0f, 90.0f, newSpeedX, newSpeedY);
+                }
             }
             
             // Deactivate if off screen
@@ -234,8 +266,48 @@ void Game::render() {
     // Draw leaf
     leaf_->render(renderer_, leafTexture_);
 
+    // Draw acorn icons for remaining nuts (top left)
+    int acornIconSize = 25;
+    for (int i = 0; i < nutsRemaining_; i++) {
+        SDL_Rect iconRect = {10 + i * (acornIconSize + 5), 10, acornIconSize, acornIconSize};
+        if (acornTexture_) {
+            SDL_RenderCopy(renderer_, acornTexture_, nullptr, &iconRect);
+        }
+    }
+
+    // Draw UI text
+    drawText("Points: " + std::to_string(hits_) + "/" + std::to_string(HITS_TO_WIN), SCREEN_WIDTH - 130, 10);
+    
+    if (gameOver_) {
+        drawText("GAME OVER!", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT / 2);
+    } else if (gameWon_) {
+        drawText("YOU WIN!", SCREEN_WIDTH / 2 - 70, SCREEN_HEIGHT / 2);
+    }
+
     // Present the rendered frame
     SDL_RenderPresent(renderer_);
 }
 
+void Game::drawText(const std::string& text, int x, int y) {
+    if (!font_) return; // No font loaded, skip rendering
+    
+    SDL_Color color = {255, 255, 255, 255}; // White text
+    SDL_Surface* surface = TTF_RenderText_Solid(font_, text.c_str(), color);
+    if (!surface) {
+        std::cerr << "Failed to render text: " << TTF_GetError() << "\n";
+        return;
+    }
+    
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+    if (!texture) {
+        SDL_FreeSurface(surface);
+        return;
+    }
+    
+    SDL_Rect destRect = {x, y, surface->w, surface->h};
+    SDL_RenderCopy(renderer_, texture, nullptr, &destRect);
+    
+    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface);
+}
 

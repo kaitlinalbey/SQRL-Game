@@ -9,23 +9,23 @@ void Leaf::update(float dt, int screenWidth, int screenHeight) {
     x_ += speedX_ * dt;
     y_ += speedY_ * dt;
 
-    // Bounce off walls
-    if (x_ < 0) {
-        x_ = 0;
+    // Bounce off walls with some tolerance to go slightly off screen
+    if (x_ < -20) {
+        x_ = -20;
         speedX_ = -speedX_;
     }
-    if (x_ + width_ > screenWidth) {
-        x_ = screenWidth - width_;
+    if (x_ + width_ > screenWidth + 20) {
+        x_ = screenWidth + 20 - width_;
         speedX_ = -speedX_;
     }
 
-    // Keep leaf in bottom half and bounce off top/bottom boundaries
-    if (y_ < screenHeight / 2) {
-        y_ = screenHeight / 2;
+    // Keep leaf in bottom half and bounce off top/bottom boundaries with tolerance
+    if (y_ < screenHeight / 2 - 20) {
+        y_ = screenHeight / 2 - 20;
         speedY_ = -speedY_;
     }
-    if (y_ + height_ > screenHeight) {
-        y_ = screenHeight - height_;
+    if (y_ + height_ > screenHeight + 20) {
+        y_ = screenHeight + 20 - height_;
         speedY_ = -speedY_;
     }
 }

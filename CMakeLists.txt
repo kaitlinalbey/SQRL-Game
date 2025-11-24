@@ -31,6 +31,7 @@ add_executable(
 # Link libraries
 target_link_libraries(demo PRIVATE
     SDL2::SDL2
+    SDL2_ttf::SDL2_ttf
     SDL2_image::SDL2_image
     tinyxml2::tinyxml2
 )
