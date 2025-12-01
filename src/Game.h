@@ -2,11 +2,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <SDL.h>
 #include <SDL_ttf.h>
-#include "Squirrel.h"
-#include "Acorn.h"
-#include "Leaf.h"
+#include "GameObject.h"
 
 class Game {
 public:
@@ -19,17 +18,18 @@ private:
     void handleInput();
     bool loadConfig(const std::string& path);
     void drawText(const std::string& text, int x, int y);
+    void registerObjectTypes();
+    void createGameObjects();
+    GameObject* spawnAcorn(float x, float y);
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
-    SDL_Texture* squirrelTexture_ = nullptr;
-    SDL_Texture* acornTexture_ = nullptr;
-    SDL_Texture* leafTexture_ = nullptr;
+    std::unordered_map<std::string, SDL_Texture*> textures_;
     TTF_Font* font_ = nullptr;
 
-    std::unique_ptr<Squirrel> squirrel_;
-    std::vector<std::unique_ptr<Acorn>> acorns_;
-    std::unique_ptr<Leaf> leaf_;
+    std::unique_ptr<GameObject> squirrel_;
+    std::vector<std::unique_ptr<GameObject>> acorns_;
+    std::unique_ptr<GameObject> leaf_;
 
     // Configuration values
     float squirrelSpeed_ = 300.0f;

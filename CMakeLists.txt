@@ -20,12 +20,19 @@ add_executable(
     src/main.cpp 
     src/Game.h
     src/Game.cpp
-    src/Squirrel.h
-    src/Squirrel.cpp
-    src/Acorn.h
-    src/Acorn.cpp
-    src/Leaf.h
-    src/Leaf.cpp
+    src/Component.h
+    src/GameObject.h
+    src/GameObject.cpp
+    src/BodyComponent.h
+    src/BodyComponent.cpp
+    src/SpriteComponent.h
+    src/SpriteComponent.cpp
+    src/ControllerComponent.h
+    src/ControllerComponent.cpp
+    src/BehaviorComponent.h
+    src/BehaviorComponent.cpp
+    src/ObjectFactory.h
+    src/ObjectFactory.cpp
 )
 
 # Link libraries

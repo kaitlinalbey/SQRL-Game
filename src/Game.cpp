@@ -8,6 +8,11 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
+#include "ObjectFactory.h"
+#include "BodyComponent.h"
+#include "SpriteComponent.h"
+#include "ControllerComponent.h"
+#include "BehaviorComponent.h"
 
 using namespace std::chrono_literals;
 
@@ -105,38 +110,25 @@ bool Game::init() {
     }
 
     // Load textures
-    SDL_Surface* squirrelSurf = IMG_Load("assets/SQRL.png");
-    if (squirrelSurf) {
-        squirrelTexture_ = SDL_CreateTextureFromSurface(renderer_, squirrelSurf);
-        SDL_FreeSurface(squirrelSurf);
-    } else {
-        std::cerr << "Failed to load SQRL.png: " << IMG_GetError() << "\n";
+    std::vector<std::pair<std::string, std::string>> textureFiles = {
+        {"SQRL", "assets/SQRL.png"},
+        {"acorn", "assets/acorn.png"},
+        {"leaf", "assets/leaf.png"}
+    };
+    
+    for (const auto& [name, path] : textureFiles) {
+        SDL_Surface* surf = IMG_Load(path.c_str());
+        if (surf) {
+            textures_[name] = SDL_CreateTextureFromSurface(renderer_, surf);
+            SDL_FreeSurface(surf);
+        } else {
+            std::cerr << "Failed to load " << path << ": " << IMG_GetError() << "\n";
+        }
     }
 
-    SDL_Surface* acornSurf = IMG_Load("assets/acorn.png");
-    if (acornSurf) {
-        acornTexture_ = SDL_CreateTextureFromSurface(renderer_, acornSurf);
-        SDL_FreeSurface(acornSurf);
-    } else {
-        std::cerr << "Failed to load acorn.png: " << IMG_GetError() << "\n";
-    }
-
-    SDL_Surface* leafSurf = IMG_Load("assets/leaf.png");
-    if (leafSurf) {
-        leafTexture_ = SDL_CreateTextureFromSurface(renderer_, leafSurf);
-        SDL_FreeSurface(leafSurf);
-    } else {
-        std::cerr << "Failed to load leaf.png: " << IMG_GetError() << "\n";
-    }
-
-    if (!squirrelTexture_ || !acornTexture_ || !leafTexture_) {
-        std::cerr << "Failed to load required textures\n";
-        return false;
-    }
-
-    // Create game objects
-    squirrel_ = std::make_unique<Squirrel>(400.0f, 50.0f, 80.0f, 80.0f, squirrelSpeed_);
-    leaf_ = std::make_unique<Leaf>(400.0f, 500.0f, 90.0f, 90.0f, leafSpeedX_, leafSpeedY_);
+    // Register object types and create game objects
+    registerObjectTypes();
+    createGameObjects();
     
     std::cout << "Init complete. Squirrel Acorn Game ready!\n";
     return true;
@@ -144,9 +136,10 @@ bool Game::init() {
 
 void Game::shutdown() {
     if (font_) { TTF_CloseFont(font_); font_ = nullptr; }
-    if (squirrelTexture_) { SDL_DestroyTexture(squirrelTexture_); squirrelTexture_ = nullptr; }
-    if (acornTexture_) { SDL_DestroyTexture(acornTexture_); acornTexture_ = nullptr; }
-    if (leafTexture_) { SDL_DestroyTexture(leafTexture_); leafTexture_ = nullptr; }
+    for (auto& [name, texture] : textures_) {
+        if (texture) SDL_DestroyTexture(texture);
+    }
+    textures_.clear();
     if (renderer_) { SDL_DestroyRenderer(renderer_); renderer_ = nullptr; }
     if (window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
     TTF_Quit();
@@ -154,31 +147,119 @@ void Game::shutdown() {
     SDL_Quit();
 }
 
+void Game::registerObjectTypes() {
+    auto& factory = ObjectFactory::instance();
+    
+    // Register Squirrel
+    factory.registerType("Squirrel", [this](const ObjectParams& params) {
+        auto obj = std::make_unique<GameObject>("Squirrel");
+        obj->addComponent(std::make_unique<BodyComponent>(params.x, params.y, params.width, params.height));
+        auto sprite = std::make_unique<SpriteComponent>("SQRL", renderer_);
+        sprite->setTexture(textures_["SQRL"]);
+        obj->addComponent(std::move(sprite));
+        obj->addComponent(std::make_unique<ControllerComponent>(params.speed, SCREEN_WIDTH));
+        return obj;
+    });
+    
+    // Register Leaf
+    factory.registerType("Leaf", [this](const ObjectParams& params) {
+        auto obj = std::make_unique<GameObject>("Leaf");
+        auto body = std::make_unique<BodyComponent>(params.x, params.y, params.width, params.height);
+        body->setVelocity(params.velocityX, params.velocityY);
+        obj->addComponent(std::move(body));
+        auto sprite = std::make_unique<SpriteComponent>("leaf", renderer_);
+        sprite->setTexture(textures_["leaf"]);
+        obj->addComponent(std::move(sprite));
+        obj->addComponent(std::make_unique<BounceBehavior>(SCREEN_WIDTH, SCREEN_HEIGHT));
+        return obj;
+    });
+    
+    // Register Acorn
+    factory.registerType("Acorn", [this](const ObjectParams& params) {
+        auto obj = std::make_unique<GameObject>("Acorn");
+        auto body = std::make_unique<BodyComponent>(params.x, params.y, params.width, params.height);
+        body->setVelocity(0, params.speed);
+        obj->addComponent(std::move(body));
+        auto sprite = std::make_unique<SpriteComponent>("acorn", renderer_);
+        sprite->setTexture(textures_["acorn"]);
+        obj->addComponent(std::move(sprite));
+        obj->addComponent(std::make_unique<ProjectileBehavior>(SCREEN_HEIGHT));
+        return obj;
+    });
+    
+    factory.loadFromXML("assets/objects.xml");
+}
+
+void Game::createGameObjects() {
+    auto& factory = ObjectFactory::instance();
+    
+    // Create squirrel
+    ObjectParams squirrelParams;
+    squirrelParams.x = 400.0f;
+    squirrelParams.y = 50.0f;
+    squirrelParams.width = 80.0f;
+    squirrelParams.height = 80.0f;
+    squirrelParams.speed = squirrelSpeed_;
+    squirrel_ = factory.create("Squirrel", squirrelParams);
+    squirrel_->init();
+    
+    // Create leaf
+    ObjectParams leafParams;
+    leafParams.x = 400.0f;
+    leafParams.y = 500.0f;
+    leafParams.width = 90.0f;
+    leafParams.height = 90.0f;
+    leafParams.velocityX = leafSpeedX_;
+    leafParams.velocityY = leafSpeedY_;
+    leaf_ = factory.create("Leaf", leafParams);
+    leaf_->init();
+}
+
+GameObject* Game::spawnAcorn(float x, float y) {
+    ObjectParams acornParams;
+    acornParams.x = x;
+    acornParams.y = y;
+    acornParams.width = acornWidth_;
+    acornParams.height = acornHeight_;
+    acornParams.speed = acornSpeed_;
+    
+    auto acorn = ObjectFactory::instance().create("Acorn", acornParams);
+    acorn->init();
+    acorns_.push_back(std::move(acorn));
+    return acorns_.back().get();
+}
+
 void Game::handleInput() {
     const Uint8* keyState = SDL_GetKeyboardState(nullptr);
     
     float dt = 1.0f / 60.0f;
     
-    // Move squirrel left/right
-    if (keyState[SDL_SCANCODE_LEFT] || keyState[SDL_SCANCODE_A]) {
-        squirrel_->moveLeft(dt);
-    }
-    if (keyState[SDL_SCANCODE_RIGHT] || keyState[SDL_SCANCODE_D]) {
-        squirrel_->moveRight(dt);
+    auto* controller = squirrel_->getComponent<ControllerComponent>();
+    if (controller) {
+        // Move squirrel left/right
+        if (keyState[SDL_SCANCODE_LEFT] || keyState[SDL_SCANCODE_A]) {
+            controller->moveLeft(dt);
+        }
+        if (keyState[SDL_SCANCODE_RIGHT] || keyState[SDL_SCANCODE_D]) {
+            controller->moveRight(dt);
+        }
     }
 
     // Shoot acorn with W key or Up arrow
     if (!gameOver_ && !gameWon_ && (keyState[SDL_SCANCODE_W] || keyState[SDL_SCANCODE_UP])) {
         if (acornCooldown_ <= 0.0f && nutsRemaining_ > 0) {
-            float acornX = squirrel_->getX() + squirrel_->getWidth() / 2 - acornWidth_ / 2;
-            float acornY = squirrel_->getY() + squirrel_->getHeight();
-            acorns_.push_back(std::make_unique<Acorn>(acornX, acornY, acornWidth_, acornHeight_, acornSpeed_));
-            acornCooldown_ = ACORN_COOLDOWN_TIME;
-            nutsRemaining_--;
-            
-            if (nutsRemaining_ <= 0) {
-                gameOver_ = true;
-                std::cout << "Game Over! You ran out of nuts!\n";
+            auto* squirrelBody = squirrel_->getComponent<BodyComponent>();
+            if (squirrelBody) {
+                float acornX = squirrelBody->getX() + squirrelBody->getWidth() / 2 - acornWidth_ / 2;
+                float acornY = squirrelBody->getY() + squirrelBody->getHeight();
+                spawnAcorn(acornX, acornY);
+                acornCooldown_ = ACORN_COOLDOWN_TIME;
+                nutsRemaining_--;
+                
+                if (nutsRemaining_ <= 0) {
+                    gameOver_ = true;
+                    std::cout << "Game Over! You ran out of nuts!\n";
+                }
             }
         }
     }
@@ -190,25 +271,33 @@ void Game::update(float dt) {
         acornCooldown_ -= dt;
     }
 
-    // Update squirrel
-    squirrel_->update(dt, SCREEN_WIDTH);
+    // Update game objects
+    squirrel_->update(dt);
+    leaf_->update(dt);
 
+    auto* leafBody = leaf_->getComponent<BodyComponent>();
+    
     // Update acorns
     for (auto& acorn : acorns_) {
-        if (acorn->isActive()) {
-            acorn->update(dt);
-            
+        if (!acorn->isActive()) continue;
+        
+        acorn->update(dt);
+        
+        auto* acornBody = acorn->getComponent<BodyComponent>();
+        auto* projectile = acorn->getComponent<ProjectileBehavior>();
+        
+        if (acornBody && leafBody) {
             // Check collision with leaf (smaller hitbox - 60% of actual size)
             float leafHitboxShrink = 0.2f;
-            float leafHitX = leaf_->getX() + leaf_->getWidth() * leafHitboxShrink;
-            float leafHitY = leaf_->getY() + leaf_->getHeight() * leafHitboxShrink;
-            float leafHitW = leaf_->getWidth() * (1.0f - 2 * leafHitboxShrink);
-            float leafHitH = leaf_->getHeight() * (1.0f - 2 * leafHitboxShrink);
+            float leafHitX = leafBody->getX() + leafBody->getWidth() * leafHitboxShrink;
+            float leafHitY = leafBody->getY() + leafBody->getHeight() * leafHitboxShrink;
+            float leafHitW = leafBody->getWidth() * (1.0f - 2 * leafHitboxShrink);
+            float leafHitH = leafBody->getHeight() * (1.0f - 2 * leafHitboxShrink);
             
-            if (acorn->getX() < leafHitX + leafHitW &&
-                acorn->getX() + acorn->getWidth() > leafHitX &&
-                acorn->getY() < leafHitY + leafHitH &&
-                acorn->getY() + acorn->getHeight() > leafHitY) {
+            if (acornBody->getX() < leafHitX + leafHitW &&
+                acornBody->getX() + acornBody->getWidth() > leafHitX &&
+                acornBody->getY() < leafHitY + leafHitH &&
+                acornBody->getY() + acornBody->getHeight() > leafHitY) {
                 acorn->setActive(false);
                 hits_++;
                 score_++;
@@ -218,31 +307,32 @@ void Game::update(float dt) {
                     gameWon_ = true;
                     std::cout << "You Win! You hit the leaf " << HITS_TO_WIN << " times!\n";
                 } else {
-                    // Respawn leaf at random position in bottom half
-                    float newX = static_cast<float>(rand() % (SCREEN_WIDTH - 90));
-                    float newY = static_cast<float>((SCREEN_HEIGHT / 2) + rand() % (SCREEN_HEIGHT / 2 - 90));
-                    float newSpeedX = (rand() % 2 == 0 ? 1 : -1) * (150.0f + rand() % 100);
-                    float newSpeedY = (rand() % 2 == 0 ? 1 : -1) * (100.0f + rand() % 100);
-                    leaf_ = std::make_unique<Leaf>(newX, newY, 90.0f, 90.0f, newSpeedX, newSpeedY);
+                    // Respawn leaf at random position
+                    ObjectParams leafParams;
+                    leafParams.x = static_cast<float>(rand() % (SCREEN_WIDTH - 90));
+                    leafParams.y = static_cast<float>((SCREEN_HEIGHT / 2) + rand() % (SCREEN_HEIGHT / 2 - 90));
+                    leafParams.width = 90.0f;
+                    leafParams.height = 90.0f;
+                    leafParams.velocityX = (rand() % 2 == 0 ? 1 : -1) * (150.0f + rand() % 100);
+                    leafParams.velocityY = (rand() % 2 == 0 ? 1 : -1) * (100.0f + rand() % 100);
+                    leaf_ = ObjectFactory::instance().create("Leaf", leafParams);
+                    leaf_->init();
                 }
             }
-            
-            // Deactivate if off screen
-            if (acorn->isOffScreen(SCREEN_HEIGHT)) {
-                acorn->setActive(false);
-            }
+        }
+        
+        // Deactivate if off screen
+        if (projectile && projectile->isOffScreen()) {
+            acorn->setActive(false);
         }
     }
 
     // Remove inactive acorns
     acorns_.erase(
         std::remove_if(acorns_.begin(), acorns_.end(), 
-            [](const std::unique_ptr<Acorn>& a) { return !a->isActive(); }),
+            [](const std::unique_ptr<GameObject>& a) { return !a->isActive(); }),
         acorns_.end()
     );
-
-    // Update leaf
-    leaf_->update(dt, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
 void Game::render() {
@@ -251,27 +341,28 @@ void Game::render() {
     SDL_RenderClear(renderer_);
 
     // Draw brown branch at top
-    SDL_SetRenderDrawColor(renderer_, 139, 69, 19, 255);
-    SDL_Rect branch = {0, static_cast<int>(squirrel_->getY() + squirrel_->getHeight()), SCREEN_WIDTH, 20};
-    SDL_RenderFillRect(renderer_, &branch);
-
-    // Draw squirrel
-    squirrel_->render(renderer_, squirrelTexture_);
-
-    // Draw acorns
-    for (const auto& acorn : acorns_) {
-        acorn->render(renderer_, acornTexture_);
+    auto* squirrelBody = squirrel_->getComponent<BodyComponent>();
+    if (squirrelBody) {
+        SDL_SetRenderDrawColor(renderer_, 139, 69, 19, 255);
+        SDL_Rect branch = {0, static_cast<int>(squirrelBody->getY() + squirrelBody->getHeight()), SCREEN_WIDTH, 20};
+        SDL_RenderFillRect(renderer_, &branch);
     }
 
-    // Draw leaf
-    leaf_->render(renderer_, leafTexture_);
+    // Render game objects
+    squirrel_->render();
+    
+    for (const auto& acorn : acorns_) {
+        acorn->render();
+    }
+    
+    leaf_->render();
 
     // Draw acorn icons for remaining nuts (top left)
     int acornIconSize = 25;
     for (int i = 0; i < nutsRemaining_; i++) {
         SDL_Rect iconRect = {10 + i * (acornIconSize + 5), 10, acornIconSize, acornIconSize};
-        if (acornTexture_) {
-            SDL_RenderCopy(renderer_, acornTexture_, nullptr, &iconRect);
+        if (textures_["acorn"]) {
+            SDL_RenderCopy(renderer_, textures_["acorn"], nullptr, &iconRect);
         }
     }
 
