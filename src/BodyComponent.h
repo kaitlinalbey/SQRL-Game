@@ -1,5 +1,8 @@
 #pragma once
 #include "Component.h"
+#include <box2d/box2d.h>
+
+class PhysicsWorld;
 
 class BodyComponent : public Component {
 public:
@@ -23,9 +26,19 @@ public:
     
     void update(float dt) override;
 
+    // Box2D physics integration
+    void createPhysicsBody(PhysicsWorld* world, b2BodyType type = b2_dynamicBody);
+    void destroyPhysicsBody();
+    void syncFromPhysics();  // Copy physics position to visual position
+    void syncToPhysics();    // Copy visual position to physics (for kinematic control)
+    b2BodyId getPhysicsBodyId() const { return physicsBodyId_; }
+    bool hasPhysicsBody() const { return B2_IS_NON_NULL(physicsBodyId_); }
+
 private:
     float x_, y_;
     float width_, height_;
     float velocityX_ = 0;
     float velocityY_ = 0;
+    b2BodyId physicsBodyId_ = b2_nullBodyId;
+    PhysicsWorld* physicsWorld_ = nullptr;
 };
