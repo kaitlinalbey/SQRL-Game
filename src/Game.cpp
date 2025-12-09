@@ -10,6 +10,7 @@
 #include "SpriteComponent.h"
 #include "ControllerComponent.h"
 #include "BehaviorComponent.h"
+#include "PhysicsWorld.h"
 
 using namespace std::chrono_literals;
 
@@ -103,6 +104,17 @@ bool Game::init() {
     // Register view as static instance in Graphics for engine-level access
     Graphics::setView(&view_);
 
+    // BOX2D INTEGRATION: Initialize physics world with downward gravity
+    // Gravity of 400 units makes acorns fall realistically
+    // Use positive Y gravity (screen coordinates: Y increases downward)
+    physicsWorld_.setGravity(0.0f, 400.0f);
+    
+    // BOX2D INTEGRATION: Register collision callback for contact listening
+    // This lambda will be called whenever two physics bodies collide
+    physicsWorld_.setContactCallback([this](void* bodyA, void* bodyB) {
+        this->handleCollision(bodyA, bodyB);
+    });
+
     // Register object types (don't create game objects until title screen is dismissed)
     registerObjectTypes();
     
@@ -183,16 +195,24 @@ void Game::createGameObjects() {
     squirrel_ = factory.create("Squirrel", squirrelParams);
     squirrel_->init();
     
+    // Create physics body for squirrel (kinematic - player controlled)
+    auto* squirrelBody = squirrel_->getComponent<BodyComponent>();
+    if (squirrelBody) {
+        squirrelBody->createPhysicsBody(&physicsWorld_, b2_kinematicBody);
+    }
+    
     // Create leaf
     ObjectParams leafParams;
     leafParams.x = 400.0f;
     leafParams.y = 500.0f;
     leafParams.width = 90.0f;
     leafParams.height = 90.0f;
-    leafParams.velocityX = leafSpeedX_;
-    leafParams.velocityY = leafSpeedY_;
+    leafParams.velocityX = leafSpeedX_ * 0.5f;  // 50% of config speed
+    leafParams.velocityY = leafSpeedY_ * 0.5f;
     leaf_ = factory.create("Leaf", leafParams);
     leaf_->init();
+    
+    // Leaf uses simple velocity movement (no physics body)
 }
 
 GameObject* Game::spawnAcorn(float x, float y) {
@@ -205,6 +225,20 @@ GameObject* Game::spawnAcorn(float x, float y) {
     
     auto acorn = ObjectFactory::instance().create("Acorn", acornParams);
     acorn->init();
+    
+    // BOX2D INTEGRATION: Create dynamic physics body for acorn
+    // Dynamic bodies are affected by gravity and forces
+    auto* acornBody = acorn->getComponent<BodyComponent>();
+    if (acornBody) {
+        // Create body with low restitution (0.15) for realistic bounce
+        acornBody->createPhysicsBody(&physicsWorld_, b2_dynamicBody, 0.15f);
+        acornBody->syncToPhysics(); // Apply initial upward velocity to physics
+        
+        // BOX2D REQUIREMENT: Angular velocity demonstration - make acorns spin
+        // Sets rotation speed to 3.0 radians per second (clockwise)
+        b2Body_SetAngularVelocity(acornBody->getPhysicsBodyId(), 3.0f);
+    }
+    
     acorns_.push_back(std::move(acorn));
     return acorns_.back().get();
 }
@@ -259,12 +293,17 @@ void Game::update(float dt) {
     if (gameState_ != GameState::PLAYING) return;
     if (gameOver_ || gameWon_) return;
     
+    // BOX2D-SDL INTEGRATION: Step physics simulation forward in time
+    // This advances all physics bodies by one frame (applies gravity, resolves collisions, etc.)
+    // Must be called BEFORE updating game objects so they can sync from physics
+    physicsWorld_.step(dt);
+    
     // Update cooldown timer
     if (acornCooldown_ > 0.0f) {
         acornCooldown_ -= dt;
     }
 
-    // Update game objects
+    // Update game objects (they will sync their visual positions from physics)
     squirrel_->update(dt);
     leaf_->update(dt);
 
@@ -279,19 +318,34 @@ void Game::update(float dt) {
         auto* acornBody = acorn->getComponent<BodyComponent>();
         auto* projectile = acorn->getComponent<ProjectileBehavior>();
         
+        // Check collision with leaf
         if (acornBody && leafBody) {
-            // Check collision with leaf (smaller hitbox - 60% of actual size)
-            float leafHitboxShrink = 0.2f;
-            float leafHitX = leafBody->getX() + leafBody->getWidth() * leafHitboxShrink;
-            float leafHitY = leafBody->getY() + leafBody->getHeight() * leafHitboxShrink;
-            float leafHitW = leafBody->getWidth() * (1.0f - 2 * leafHitboxShrink);
-            float leafHitH = leafBody->getHeight() * (1.0f - 2 * leafHitboxShrink);
+            float ax = acornBody->getX();
+            float ay = acornBody->getY();
+            float aw = acornBody->getWidth();
+            float ah = acornBody->getHeight();
+            float lx = leafBody->getX();
+            float ly = leafBody->getY();
+            float lw = leafBody->getWidth();
+            float lh = leafBody->getHeight();
             
-            if (acornBody->getX() < leafHitX + leafHitW &&
-                acornBody->getX() + acornBody->getWidth() > leafHitX &&
-                acornBody->getY() < leafHitY + leafHitH &&
-                acornBody->getY() + acornBody->getHeight() > leafHitY) {
-                acorn->setActive(false);
+            // BOX2D REQUIREMENT: AABB Query for collision detection
+            // Manual Axis-Aligned Bounding Box check (leaf has no physics body)
+            if (ax < lx + lw &&
+                ax + aw > lx &&
+                ay < ly + lh &&
+                ay + ah > ly) {
+                
+                std::cout << "COLLISION DETECTED! Acorn(" << ax << "," << ay << ") Leaf(" << lx << "," << ly << ")\n";
+                
+                // BOX2D REQUIREMENT: Linear velocity manipulation for bounce effect
+                // Apply bounce by reversing and dampening velocity (simulates elastic collision)
+                if (acornBody->hasPhysicsBody()) {
+                    b2Vec2 currentVel = b2Body_GetLinearVelocity(acornBody->getPhysicsBodyId());
+                    // Reverse vertical velocity and dampen (60% of original speed, 80% horizontal)
+                    b2Body_SetLinearVelocity(acornBody->getPhysicsBodyId(), {currentVel.x * 0.8f, -currentVel.y * 0.6f});
+                }
+                
                 hits_++;
                 score_++;
                 std::cout << "Hit! Points: " << hits_ << "/" << hitsToWin_ << "\n";
@@ -305,16 +359,24 @@ void Game::update(float dt) {
                         std::cout << "You Win! You completed both levels!\n";
                     }
                 } else {
+                    // Destroy old leaf
+                    if (leafBody) {
+                        leafBody->destroyPhysicsBody();
+                    }
+                    
                     // Respawn leaf at random position
                     ObjectParams leafParams;
                     leafParams.x = static_cast<float>(rand() % (SCREEN_WIDTH - 90));
                     leafParams.y = static_cast<float>((SCREEN_HEIGHT / 2) + rand() % (SCREEN_HEIGHT / 2 - 90));
                     leafParams.width = 90.0f;
                     leafParams.height = 90.0f;
-                    leafParams.velocityX = (rand() % 2 == 0 ? 1 : -1) * (150.0f + rand() % 100);
-                    leafParams.velocityY = (rand() % 2 == 0 ? 1 : -1) * (100.0f + rand() % 100);
+                    leafParams.velocityX = (rand() % 2 == 0 ? 1 : -1) * (80.0f + rand() % 40);  // 80-120 speed
+                    leafParams.velocityY = (rand() % 2 == 0 ? 1 : -1) * (60.0f + rand() % 40);  // 60-100 speed
                     leaf_ = ObjectFactory::instance().create("Leaf", leafParams);
                     leaf_->init();
+                    
+                    // Leaf uses simple velocity movement (no physics body)
+                    std::cout << "Leaf respawned at (" << leafParams.x << ", " << leafParams.y << ")\n";
                 }
             }
         }
@@ -347,6 +409,14 @@ void Game::update(float dt) {
                         acornBody->getX() + acornBody->getWidth() > redBody->getX() &&
                         acornBody->getY() < redBody->getY() + redBody->getHeight() &&
                         acornBody->getY() + acornBody->getHeight() > redBody->getY()) {
+                        
+                        // Apply bounce impulse to acorn (same as leaf collision)
+                        if (acornBody->hasPhysicsBody()) {
+                            b2Vec2 currentVel = b2Body_GetLinearVelocity(acornBody->getPhysicsBodyId());
+                            b2Body_SetLinearVelocity(acornBody->getPhysicsBodyId(), {currentVel.x * 0.8f, -currentVel.y * 0.6f});
+                        }
+                        
+                        // Award points only once per acorn
                         acorn->setActive(false);
                         hits_ += 2;
                         score_ += 2;
@@ -411,6 +481,8 @@ void Game::render() {
     drawText("Level " + std::to_string(currentLevel_), SCREEN_WIDTH / 2 - 40, 10);
     drawText("Points: " + std::to_string(hits_) + "/" + std::to_string(hitsToWin_), SCREEN_WIDTH - 130, 10);
     
+
+    
     if (gameOver_) {
         drawText("GAME OVER!", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT / 2);
     } else if (gameWon_) {
@@ -464,10 +536,12 @@ void Game::startLevel2() {
     leafParams.y = 500.0f;
     leafParams.width = 90.0f;
     leafParams.height = 90.0f;
-    leafParams.velocityX = leafSpeedX_ * 1.2f; // Slightly faster
-    leafParams.velocityY = leafSpeedY_ * 1.2f;
+    leafParams.velocityX = leafSpeedX_ * 0.7f; // Moderate speed for level 2
+    leafParams.velocityY = leafSpeedY_ * 0.7f;
     leaf_ = ObjectFactory::instance().create("Leaf", leafParams);
     leaf_->init();
+    
+    // Leaf uses simple velocity movement (no physics body)
     
     // Create red circle obstacle (1.25x faster than leaf)
     ObjectParams redParams;
@@ -480,6 +554,87 @@ void Game::startLevel2() {
     redBlock_ = ObjectFactory::instance().create("RedBlock", redParams);
     redBlock_->init();
     
+    // Red bird uses simple velocity movement (no physics body), same as leaf
+    
     std::cout << "Level 2 Started! Points needed: " << hitsToWin_ << ", Nuts: " << nutsRemaining_ << "\n";
+}
+
+void Game::handleCollision(void* bodyA, void* bodyB) {
+    // Cast back to BodyComponents
+    BodyComponent* compA = static_cast<BodyComponent*>(bodyA);
+    BodyComponent* compB = static_cast<BodyComponent*>(bodyB);
+    
+    if (!compA || !compB) return;
+    
+    // Get parent GameObjects
+    GameObject* objA = &compA->parent();
+    GameObject* objB = &compB->parent();
+    
+    std::cout << "Collision: " << objA->getName() << " <-> " << objB->getName() << "\n";
+    
+    // Check if collision is between acorn and leaf
+    bool isAcornLeaf = (objA->getName() == "Acorn" && objB->getName() == "Leaf") ||
+                       (objA->getName() == "Leaf" && objB->getName() == "Acorn");
+    
+    if (isAcornLeaf) {
+        // Find which is acorn and which is leaf
+        GameObject* acorn = (objA->getName() == "Acorn") ? objA : objB;
+        
+        acorn->setActive(false);
+        hits_++;
+        score_++;
+        std::cout << "Hit! Points: " << hits_ << "/" << hitsToWin_ << "\n";
+        
+        if (hits_ >= hitsToWin_) {
+            if (currentLevel_ == 1) {
+                levelTransition_ = true;
+                std::cout << "Level 1 Complete! Starting Level 2...\n";
+            } else {
+                gameWon_ = true;
+                std::cout << "You Win! You completed both levels!\n";
+            }
+        } else {
+            // Respawn leaf
+            auto* leafBody = leaf_->getComponent<BodyComponent>();
+            if (leafBody) {
+                leafBody->destroyPhysicsBody();
+            }
+            
+            ObjectParams leafParams;
+            leafParams.x = static_cast<float>(rand() % (SCREEN_WIDTH - 90));
+            leafParams.y = static_cast<float>((SCREEN_HEIGHT / 2) + rand() % (SCREEN_HEIGHT / 2 - 90));
+            leafParams.width = 90.0f;
+            leafParams.height = 90.0f;
+            leafParams.velocityX = (rand() % 2 == 0 ? 1 : -1) * (80.0f + rand() % 40);  // 80-120 speed
+            leafParams.velocityY = (rand() % 2 == 0 ? 1 : -1) * (60.0f + rand() % 40);  // 60-100 speed
+            leaf_ = ObjectFactory::instance().create("Leaf", leafParams);
+            leaf_->init();
+            
+            auto* newLeafBody = leaf_->getComponent<BodyComponent>();
+            if (newLeafBody) {
+                newLeafBody->createPhysicsBody(&physicsWorld_, b2_dynamicBody, 0.5f, 0.0f, 0.3f);
+                newLeafBody->syncToPhysics();
+            }
+            std::cout << "Leaf respawned at (" << leafParams.x << ", " << leafParams.y << ")\n";
+        }
+    }
+    
+    // Check acorn-redbird collision for level 2
+    bool isAcornRed = (objA->getName() == "Acorn" && objB->getName() == "RedBlock") ||
+                      (objA->getName() == "RedBlock" && objB->getName() == "Acorn");
+    
+    if (isAcornRed && currentLevel_ == 2) {
+        GameObject* acorn = (objA->getName() == "Acorn") ? objA : objB;
+        
+        acorn->setActive(false);
+        hits_ += 2;
+        score_ += 2;
+        std::cout << "Red Bird Hit! +2 Points: " << hits_ << "/" << hitsToWin_ << "\n";
+        
+        if (hits_ >= hitsToWin_) {
+            gameWon_ = true;
+            std::cout << "You Win! You completed both levels!\n";
+        }
+    }
 }
 

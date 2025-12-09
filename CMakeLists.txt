@@ -26,6 +26,8 @@ add_executable(
     src/Input.cpp
     src/View.h
     src/View.cpp
+    src/PhysicsWorld.h
+    src/PhysicsWorld.cpp
     src/Component.h
     src/GameObject.h
     src/GameObject.cpp
@@ -47,6 +49,7 @@ target_link_libraries(demo PRIVATE
     SDL2_ttf::SDL2_ttf
     SDL2_image::SDL2_image
     tinyxml2::tinyxml2
+    box2d::box2d
 )
 
 # Define SDL_MAIN_HANDLED for MinGW
