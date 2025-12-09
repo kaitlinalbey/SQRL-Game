@@ -70,4 +70,8 @@ private:
     // Rendering constants
     static constexpr int SCREEN_WIDTH = 800;
     static constexpr int SCREEN_HEIGHT = 600;
+    
+    // Frame rate limiting
+    static constexpr int TARGET_FPS = 60;
+    static constexpr float TARGET_FRAME_TIME = 1000.0f / TARGET_FPS;  // milliseconds
 };

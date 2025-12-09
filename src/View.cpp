@@ -1,17 +1,33 @@
 #include "View.h"
 #include <algorithm>
+#include <cmath>
 
 View::View(float x, float y, float width, float height)
     : centerX_(x), centerY_(y), width_(width), height_(height) {
 }
 
 void View::worldToScreen(float worldX, float worldY, int& screenX, int& screenY) const {
-    // Convert world coordinates to screen coordinates relative to view center
-    float offsetX = worldX - (centerX_ - width_ / 2.0f);
-    float offsetY = worldY - (centerY_ - height_ / 2.0f);
+    // Translate world coordinates relative to view center
+    float relativeX = worldX - centerX_;
+    float relativeY = worldY - centerY_;
     
-    screenX = static_cast<int>(offsetX);
-    screenY = static_cast<int>(offsetY);
+    // Apply rotation if non-zero
+    if (rotation_ != 0.0f) {
+        float cosAngle = std::cos(-rotation_);
+        float sinAngle = std::sin(-rotation_);
+        float rotatedX = relativeX * cosAngle - relativeY * sinAngle;
+        float rotatedY = relativeX * sinAngle + relativeY * cosAngle;
+        relativeX = rotatedX;
+        relativeY = rotatedY;
+    }
+    
+    // Apply scale
+    relativeX *= scale_;
+    relativeY *= scale_;
+    
+    // Convert to screen coordinates (center on screen)
+    screenX = static_cast<int>(relativeX + width_ / 2.0f);
+    screenY = static_cast<int>(relativeY + height_ / 2.0f);
 }
 
 void View::setCenter(float x, float y) {

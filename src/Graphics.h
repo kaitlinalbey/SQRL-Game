@@ -4,6 +4,7 @@
 #include <SDL_ttf.h>
 #include <string>
 #include <unordered_map>
+#include "View.h"
 
 class Graphics {
 public:
@@ -32,8 +33,13 @@ public:
     // Getters (for components that still need raw SDL access)
     SDL_Renderer* getRenderer() { return renderer_; }
     SDL_Window* getWindow() { return window_; }
+    
+    // Static view access for engine-level rendering
+    static View* getView() { return view_; }
+    static void setView(View* view) { view_ = view; }
 
 private:
+    static View* view_;
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
     TTF_Font* font_ = nullptr;

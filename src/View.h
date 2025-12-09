@@ -12,10 +12,14 @@ public:
     float getCenterY() const { return centerY_; }
     float getWidth() const { return width_; }
     float getHeight() const { return height_; }
+    float getScale() const { return scale_; }
+    float getRotation() const { return rotation_; }
     
     // Setters
     void setCenter(float x, float y);
     void setSize(float width, float height);
+    void setScale(float scale) { scale_ = scale; }
+    void setRotation(float rotation) { rotation_ = rotation; }
     
     // Camera movement
     void move(float dx, float dy);
@@ -30,6 +34,8 @@ private:
     float centerY_;
     float width_;
     float height_;
+    float scale_ = 1.0f;
+    float rotation_ = 0.0f;  // In radians
     
     // Optional bounds
     bool hasBounds_ = false;

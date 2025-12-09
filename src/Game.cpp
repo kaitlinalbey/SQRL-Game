@@ -26,11 +26,15 @@ int Game::run() {
     bool running = true;
 
     while (running) {
+        // Calculate frame start time
+        auto frameStart = std::chrono::steady_clock::now();
+        
+        // Calculate deltaTime from last frame
         auto currentTime = std::chrono::steady_clock::now();
         float dt = std::chrono::duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
 
-        // Cap dt to prevent large jumps
+        // Cap dt to prevent large jumps (e.g., when debugging or window dragging)
         if (dt > 0.1f) dt = 0.1f;
 
         // Process input events
@@ -43,7 +47,15 @@ int Game::run() {
         update(dt);
         render();
 
-        std::this_thread::sleep_for(16ms); // ~60 FPS
+        // Calculate frame duration
+        auto frameEnd = std::chrono::steady_clock::now();
+        float frameDuration = std::chrono::duration<float, std::milli>(frameEnd - frameStart).count();
+        
+        // Delay if work finished early to maintain target FPS
+        if (frameDuration < TARGET_FRAME_TIME) {
+            float delayTime = TARGET_FRAME_TIME - frameDuration;
+            std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(delayTime));
+        }
     }
 
     shutdown();
@@ -87,6 +99,9 @@ bool Game::init() {
     // Initialize view centered on screen
     view_.setCenter(SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
     view_.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+    
+    // Register view as static instance in Graphics for engine-level access
+    Graphics::setView(&view_);
 
     // Register object types (don't create game objects until title screen is dismissed)
     registerObjectTypes();

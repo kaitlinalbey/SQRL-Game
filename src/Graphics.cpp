@@ -2,6 +2,9 @@
 #include <SDL_image.h>
 #include <iostream>
 
+// Initialize static view pointer
+View* Graphics::view_ = nullptr;
+
 Graphics::~Graphics() {
     shutdown();
 }
