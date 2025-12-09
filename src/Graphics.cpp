@@ -148,6 +148,16 @@ void Graphics::drawFilledCircle(int centerX, int centerY, int radius, Uint8 r, U
     }
 }
 
+void Graphics::drawLine(int x1, int y1, int x2, int y2, Uint32 color) {
+    Uint8 r = (color >> 16) & 0xFF;
+    Uint8 g = (color >> 8) & 0xFF;
+    Uint8 b = color & 0xFF;
+    Uint8 a = 255;
+    
+    SDL_SetRenderDrawColor(renderer_, r, g, b, a);
+    SDL_RenderDrawLine(renderer_, x1, y1, x2, y2);
+}
+
 void Graphics::drawText(const std::string& text, int x, int y, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
     if (!font_) return;
     

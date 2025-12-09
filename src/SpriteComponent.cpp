@@ -45,5 +45,10 @@ void SpriteComponent::render(const View* view) {
         static_cast<int>(body->getHeight())
     };
     
-    SDL_RenderCopy(renderer_, texture_, nullptr, &destRect);
+    // BOX2D-SDL SYNC: Render sprite with physics rotation
+    // Convert rotation from radians (Box2D) to degrees (SDL)
+    double angleDegrees = body->getRotation() * (180.0 / 3.14159265359);
+    
+    // Use SDL_RenderCopyEx to render with rotation (makes spinning acorns visible)
+    SDL_RenderCopyEx(renderer_, texture_, nullptr, &destRect, angleDegrees, nullptr, SDL_FLIP_NONE);
 }

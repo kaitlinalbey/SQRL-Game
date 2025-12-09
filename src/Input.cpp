@@ -79,6 +79,9 @@ SDL_Scancode Input::keyToScancode(Key key) const {
         case Key::D:      return SDL_SCANCODE_D;
         case Key::W:      return SDL_SCANCODE_W;
         case Key::S:      return SDL_SCANCODE_S;
+        case Key::R:      return SDL_SCANCODE_R;
+        case Key::F:      return SDL_SCANCODE_F;
+        case Key::T:      return SDL_SCANCODE_T;
         case Key::SPACE:  return SDL_SCANCODE_SPACE;
         case Key::ENTER:  return SDL_SCANCODE_RETURN;
         case Key::ESCAPE: return SDL_SCANCODE_ESCAPE;

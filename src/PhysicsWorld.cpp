@@ -2,12 +2,19 @@
 #include "BodyComponent.h"
 #include <iostream>
 
+// BOX2D INTEGRATION: Create Box2D physics world with configurable gravity
+// This wrapper manages the b2WorldId which represents the entire physics simulation
 PhysicsWorld::PhysicsWorld(float gravityX, float gravityY) {
+    // Initialize world definition with default settings
     b2WorldDef worldDef = b2DefaultWorldDef();
+    
+    // Set gravity vector (typically {0, positive_value} for downward gravity)
     worldDef.gravity = {gravityX, gravityY};
+    
+    // Create the Box2D world - this allocates the physics simulation context
     worldId_ = b2CreateWorld(&worldDef);
     
-    // Register contact callback
+    // Register contact callback for collision detection
     b2World_SetPreSolveCallback(worldId_, contactBeginCallback, this);
 }
 
@@ -17,8 +24,13 @@ PhysicsWorld::~PhysicsWorld() {
     }
 }
 
+// BOX2D INTEGRATION: Advance physics simulation by one time step
+// This should be called once per frame in the game loop
 void PhysicsWorld::step(float deltaTime, int subStepCount) {
     if (B2_IS_NON_NULL(worldId_)) {
+        // Step the physics world forward in time
+        // deltaTime: time elapsed since last frame (typically 1/60 for 60 FPS)
+        // subStepCount: number of sub-steps for stability (higher = more accurate but slower)
         b2World_Step(worldId_, deltaTime, subStepCount);
     }
 }

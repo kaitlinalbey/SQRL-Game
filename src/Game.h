@@ -70,6 +70,8 @@ private:
     std::string title_ = "Squirrel Acorn Game";
     GameState gameState_ = GameState::TITLE_SCREEN;
     
+
+    
     // Rendering constants
     static constexpr int SCREEN_WIDTH = 800;
     static constexpr int SCREEN_HEIGHT = 600;

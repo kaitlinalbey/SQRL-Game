@@ -7,6 +7,7 @@
 enum class Key {
     LEFT, RIGHT, UP, DOWN,
     A, D, W, S,
+    R, F, T,  // Physics demo keys
     SPACE, ENTER, ESCAPE,
     UNKNOWN
 };

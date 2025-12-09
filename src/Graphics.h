@@ -28,6 +28,7 @@ public:
     void drawRect(int x, int y, int w, int h, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
     void drawFilledRect(int x, int y, int w, int h, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
     void drawFilledCircle(int centerX, int centerY, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
+    void drawLine(int x1, int y1, int x2, int y2, Uint32 color);
     void drawText(const std::string& text, int x, int y, Uint8 r = 255, Uint8 g = 255, Uint8 b = 255, Uint8 a = 255);
 
     // Getters (for components that still need raw SDL access)

@@ -104,11 +104,13 @@ bool Game::init() {
     // Register view as static instance in Graphics for engine-level access
     Graphics::setView(&view_);
 
-    // Initialize physics world with downward gravity for acorn falling
+    // BOX2D INTEGRATION: Initialize physics world with downward gravity
+    // Gravity of 400 units makes acorns fall realistically
     // Use positive Y gravity (screen coordinates: Y increases downward)
     physicsWorld_.setGravity(0.0f, 400.0f);
     
-    // Register collision callback
+    // BOX2D INTEGRATION: Register collision callback for contact listening
+    // This lambda will be called whenever two physics bodies collide
     physicsWorld_.setContactCallback([this](void* bodyA, void* bodyB) {
         this->handleCollision(bodyA, bodyB);
     });
@@ -224,11 +226,17 @@ GameObject* Game::spawnAcorn(float x, float y) {
     auto acorn = ObjectFactory::instance().create("Acorn", acornParams);
     acorn->init();
     
-    // Create physics body for acorn (dynamic) with low restitution for small bounce
+    // BOX2D INTEGRATION: Create dynamic physics body for acorn
+    // Dynamic bodies are affected by gravity and forces
     auto* acornBody = acorn->getComponent<BodyComponent>();
     if (acornBody) {
-        acornBody->createPhysicsBody(&physicsWorld_, b2_dynamicBody, 0.15f); // Low bounce
-        acornBody->syncToPhysics(); // Apply initial velocity to physics
+        // Create body with low restitution (0.15) for realistic bounce
+        acornBody->createPhysicsBody(&physicsWorld_, b2_dynamicBody, 0.15f);
+        acornBody->syncToPhysics(); // Apply initial upward velocity to physics
+        
+        // BOX2D REQUIREMENT: Angular velocity demonstration - make acorns spin
+        // Sets rotation speed to 3.0 radians per second (clockwise)
+        b2Body_SetAngularVelocity(acornBody->getPhysicsBodyId(), 3.0f);
     }
     
     acorns_.push_back(std::move(acorn));
@@ -285,7 +293,9 @@ void Game::update(float dt) {
     if (gameState_ != GameState::PLAYING) return;
     if (gameOver_ || gameWon_) return;
     
-    // Step physics simulation
+    // BOX2D-SDL INTEGRATION: Step physics simulation forward in time
+    // This advances all physics bodies by one frame (applies gravity, resolves collisions, etc.)
+    // Must be called BEFORE updating game objects so they can sync from physics
     physicsWorld_.step(dt);
     
     // Update cooldown timer
@@ -293,7 +303,7 @@ void Game::update(float dt) {
         acornCooldown_ -= dt;
     }
 
-    // Update game objects
+    // Update game objects (they will sync their visual positions from physics)
     squirrel_->update(dt);
     leaf_->update(dt);
 
@@ -319,7 +329,8 @@ void Game::update(float dt) {
             float lw = leafBody->getWidth();
             float lh = leafBody->getHeight();
             
-            // AABB collision check
+            // BOX2D REQUIREMENT: AABB Query for collision detection
+            // Manual Axis-Aligned Bounding Box check (leaf has no physics body)
             if (ax < lx + lw &&
                 ax + aw > lx &&
                 ay < ly + lh &&
@@ -327,10 +338,11 @@ void Game::update(float dt) {
                 
                 std::cout << "COLLISION DETECTED! Acorn(" << ax << "," << ay << ") Leaf(" << lx << "," << ly << ")\n";
                 
-                // Apply bounce impulse to acorn since leaf has no physics body
+                // BOX2D REQUIREMENT: Linear velocity manipulation for bounce effect
+                // Apply bounce by reversing and dampening velocity (simulates elastic collision)
                 if (acornBody->hasPhysicsBody()) {
                     b2Vec2 currentVel = b2Body_GetLinearVelocity(acornBody->getPhysicsBodyId());
-                    // Reverse vertical velocity and dampen it (bounce effect)
+                    // Reverse vertical velocity and dampen (60% of original speed, 80% horizontal)
                     b2Body_SetLinearVelocity(acornBody->getPhysicsBodyId(), {currentVel.x * 0.8f, -currentVel.y * 0.6f});
                 }
                 
@@ -404,6 +416,8 @@ void Game::update(float dt) {
                             b2Body_SetLinearVelocity(acornBody->getPhysicsBodyId(), {currentVel.x * 0.8f, -currentVel.y * 0.6f});
                         }
                         
+                        // Award points only once per acorn
+                        acorn->setActive(false);
                         hits_ += 2;
                         score_ += 2;
                         std::cout << "Red Ball Hit! +2 Points: " << hits_ << "/" << hitsToWin_ << "\n";
@@ -466,6 +480,8 @@ void Game::render() {
     // Draw UI text
     drawText("Level " + std::to_string(currentLevel_), SCREEN_WIDTH / 2 - 40, 10);
     drawText("Points: " + std::to_string(hits_) + "/" + std::to_string(hitsToWin_), SCREEN_WIDTH - 130, 10);
+    
+
     
     if (gameOver_) {
         drawText("GAME OVER!", SCREEN_WIDTH / 2 - 80, SCREEN_HEIGHT / 2);

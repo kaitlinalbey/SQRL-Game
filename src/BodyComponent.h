@@ -24,6 +24,9 @@ public:
     float getVelocityY() const { return velocityY_; }
     void setVelocity(float vx, float vy) { velocityX_ = vx; velocityY_ = vy; }
     
+    float getRotation() const { return rotation_; }
+    void setRotation(float rotation) { rotation_ = rotation; }
+    
     void update(float dt) override;
 
     // Box2D physics integration
@@ -39,6 +42,7 @@ private:
     float width_, height_;
     float velocityX_ = 0;
     float velocityY_ = 0;
+    float rotation_ = 0.0f;  // Rotation in radians
     b2BodyId physicsBodyId_ = b2_nullBodyId;
     PhysicsWorld* physicsWorld_ = nullptr;
 };
