@@ -87,6 +87,9 @@ bool Graphics::loadTexture(const std::string& name, const std::string& filePath)
         return false;
     }
 
+    // Enable alpha blending for transparency
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
     textures_[name] = texture;
     return true;
 }

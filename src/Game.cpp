@@ -94,7 +94,7 @@ bool Game::init() {
     graphics_.loadTexture("SQRL", "assets/SQRL.png");
     graphics_.loadTexture("acorn", "assets/acorn.png");
     graphics_.loadTexture("leaf", "assets/leaf.png");
-    graphics_.loadTexture("redblock", "assets/blocks.png");
+    graphics_.loadTexture("RBIRD", "assets/RBIRD.png");
 
     // Initialize view centered on screen
     view_.setCenter(SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
@@ -154,14 +154,14 @@ void Game::registerObjectTypes() {
         return obj;
     });
     
-    // Register RedBlock (fast moving obstacle)
+    // Register RedBlock (fast moving obstacle - red bird)
     factory.registerType("RedBlock", [this](const ObjectParams& params) {
         auto obj = std::make_unique<GameObject>("RedBlock");
         auto body = std::make_unique<BodyComponent>(params.x, params.y, params.width, params.height);
         body->setVelocity(params.velocityX, params.velocityY);
         obj->addComponent(std::move(body));
-        auto sprite = std::make_unique<SpriteComponent>("redblock", graphics_.getRenderer());
-        sprite->setTexture(graphics_.getTexture("redblock"));
+        auto sprite = std::make_unique<SpriteComponent>("RBIRD", graphics_.getRenderer());
+        sprite->setTexture(graphics_.getTexture("RBIRD"));
         obj->addComponent(std::move(sprite));
         obj->addComponent(std::make_unique<BounceBehavior>(SCREEN_WIDTH, SCREEN_HEIGHT));
         return obj;
@@ -395,19 +395,9 @@ void Game::render() {
     
     leaf_->render(&view_);
     
-    // Render red block as red circle if in level 2
+    // Render red bird sprite if in level 2
     if (currentLevel_ == 2 && redBlock_) {
-        auto* redBody = redBlock_->getComponent<BodyComponent>();
-        if (redBody) {
-            // Transform world coordinates to screen coordinates
-            int screenX, screenY;
-            view_.worldToScreen(redBody->getX(), redBody->getY(), screenX, screenY);
-            
-            int centerX = screenX + static_cast<int>(redBody->getWidth() / 2);
-            int centerY = screenY + static_cast<int>(redBody->getHeight() / 2);
-            int radius = static_cast<int>(redBody->getWidth() / 2);
-            graphics_.drawFilledCircle(centerX, centerY, radius, 255, 0, 0, 255);
-        }
+        redBlock_->render(&view_);
     }
 
     // Draw acorn icons for remaining nuts (top left)
