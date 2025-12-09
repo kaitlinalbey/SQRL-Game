@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ObjectDefinitions>
+    <Object type="Squirrel">
+        <Component type="BodyComponent" x="400" y="50" width="80" height="80"/>
+        <Component type="SpriteComponent" texture="SQRL"/>
+        <Component type="ControllerComponent" speed="300"/>
+    </Object>
+    
+    <Object type="Leaf">
+        <Component type="BodyComponent" x="400" y="500" width="90" height="90"/>
+        <Component type="SpriteComponent" texture="leaf"/>
+        <Component type="BounceBehavior"/>
+    </Object>
+    
+    <Object type="Acorn">
+        <Component type="BodyComponent" width="30" height="30"/>
+        <Component type="SpriteComponent" texture="acorn"/>
+        <Component type="ProjectileBehavior"/>
+    </Object>
+</ObjectDefinitions>

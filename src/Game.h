@@ -2,34 +2,43 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <SDL.h>
-#include <SDL_ttf.h>
-#include "Squirrel.h"
-#include "Acorn.h"
-#include "Leaf.h"
+#include <unordered_map>
+#include "GameObject.h"
+#include "Graphics.h"
+#include "Input.h"
+#include "View.h"
 
 class Game {
 public:
     int run();
 private:
+    enum class GameState {
+        TITLE_SCREEN,
+        PLAYING,
+        GAME_OVER
+    };
+
     bool init();
     void shutdown();
     void update(float dt);
     void render();
+    void renderTitleScreen();
     void handleInput();
     bool loadConfig(const std::string& path);
     void drawText(const std::string& text, int x, int y);
+    void registerObjectTypes();
+    void createGameObjects();
+    GameObject* spawnAcorn(float x, float y);
+    void startLevel2();
 
-    SDL_Window* window_ = nullptr;
-    SDL_Renderer* renderer_ = nullptr;
-    SDL_Texture* squirrelTexture_ = nullptr;
-    SDL_Texture* acornTexture_ = nullptr;
-    SDL_Texture* leafTexture_ = nullptr;
-    TTF_Font* font_ = nullptr;
+    Graphics graphics_;
+    Input input_;
+    View view_;
 
-    std::unique_ptr<Squirrel> squirrel_;
-    std::vector<std::unique_ptr<Acorn>> acorns_;
-    std::unique_ptr<Leaf> leaf_;
+    std::unique_ptr<GameObject> squirrel_;
+    std::vector<std::unique_ptr<GameObject>> acorns_;
+    std::unique_ptr<GameObject> leaf_;
+    std::unique_ptr<GameObject> redBlock_;
 
     // Configuration values
     float squirrelSpeed_ = 300.0f;
@@ -44,15 +53,25 @@ private:
 
     int nutsRemaining_ = 10;
     int hits_ = 0;
+    int currentLevel_ = 1;
+    int hitsToWin_ = 6;
     static constexpr int NUTS_TO_START = 10;
-    static constexpr int HITS_TO_WIN = 6;
+    static constexpr int LEVEL1_HITS = 6;
+    static constexpr int LEVEL2_HITS = 12;
+    static constexpr int LEVEL2_EXTRA_NUTS = 3;
     bool gameOver_ = false;
     bool gameWon_ = false;
+    bool levelTransition_ = false;
 
     int score_ = 0;
     std::string title_ = "Squirrel Acorn Game";
+    GameState gameState_ = GameState::TITLE_SCREEN;
     
     // Rendering constants
     static constexpr int SCREEN_WIDTH = 800;
     static constexpr int SCREEN_HEIGHT = 600;
+    
+    // Frame rate limiting
+    static constexpr int TARGET_FPS = 60;
+    static constexpr float TARGET_FRAME_TIME = 1000.0f / TARGET_FPS;  // milliseconds
 };
