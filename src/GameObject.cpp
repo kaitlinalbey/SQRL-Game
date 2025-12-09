@@ -1,4 +1,6 @@
 #include "GameObject.h"
+#include "SpriteComponent.h"
+#include "View.h"
 
 GameObject::GameObject(const std::string& name) : name_(name), active_(true) {
 }
@@ -34,5 +36,17 @@ void GameObject::render() {
     if (!active_) return;
     for (auto& comp : components_) {
         comp->render();
+    }
+}
+
+void GameObject::render(const View* view) {
+    if (!active_) return;
+    for (auto& comp : components_) {
+        // Check if component is a SpriteComponent and use view-based rendering
+        if (auto* sprite = dynamic_cast<SpriteComponent*>(comp.get())) {
+            sprite->render(view);
+        } else {
+            comp->render();
+        }
     }
 }

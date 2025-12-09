@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include "Component.h"
 
+class View;
+
 class GameObject {
 public:
     GameObject(const std::string& name = "GameObject");
@@ -27,6 +29,7 @@ public:
     void init();
     void update(float dt);
     void render();
+    void render(const View* view);
 
     const std::string& getName() const { return name_; }
     void setName(const std::string& name) { name_ = name; }

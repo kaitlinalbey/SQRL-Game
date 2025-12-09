@@ -13,6 +13,8 @@ public:
     
     void setOwner(GameObject* owner) { owner_ = owner; }
     GameObject* getOwner() const { return owner_; }
+    GameObject& parent() { return *owner_; }
+    const GameObject& parent() const { return *owner_; }
 
 protected:
     GameObject* owner_ = nullptr;

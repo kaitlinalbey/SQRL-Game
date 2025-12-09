@@ -20,6 +20,12 @@ add_executable(
     src/main.cpp 
     src/Game.h
     src/Game.cpp
+    src/Graphics.h
+    src/Graphics.cpp
+    src/Input.h
+    src/Input.cpp
+    src/View.h
+    src/View.cpp
     src/Component.h
     src/GameObject.h
     src/GameObject.cpp

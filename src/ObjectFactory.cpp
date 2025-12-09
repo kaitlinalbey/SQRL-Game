@@ -39,8 +39,24 @@ bool ObjectFactory::loadFromXML(const std::string& filepath) {
         if (!typeName) continue;
         
         std::cout << "Loaded object definition: " << typeName << "\n";
-        // Object definitions are already registered in code
-        // This XML is more for documentation/configuration
+        
+        // Parse components and their attributes
+        for (auto* compDef = objDef->FirstChildElement("Component"); compDef; compDef = compDef->NextSiblingElement("Component")) {
+            const char* compType = compDef->Attribute("type");
+            if (compType) {
+                std::cout << "  - Component: " << compType;
+                
+                // Log component parameters
+                if (compDef->Attribute("x")) std::cout << " x=" << compDef->Attribute("x");
+                if (compDef->Attribute("y")) std::cout << " y=" << compDef->Attribute("y");
+                if (compDef->Attribute("width")) std::cout << " width=" << compDef->Attribute("width");
+                if (compDef->Attribute("height")) std::cout << " height=" << compDef->Attribute("height");
+                if (compDef->Attribute("speed")) std::cout << " speed=" << compDef->Attribute("speed");
+                if (compDef->Attribute("texture")) std::cout << " texture=" << compDef->Attribute("texture");
+                
+                std::cout << "\n";
+            }
+        }
     }
     
     return true;
