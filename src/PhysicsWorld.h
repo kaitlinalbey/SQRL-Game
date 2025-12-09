@@ -1,6 +1,7 @@
 #pragma once
 
 #include <box2d/box2d.h>
+#include <functional>
 
 class PhysicsWorld {
 public:
@@ -16,7 +17,14 @@ public:
     // World settings
     void setGravity(float x, float y);
     b2Vec2 getGravity() const;
+    
+    // Collision callback
+    using CollisionCallback = std::function<void(void* bodyA, void* bodyB)>;
+    void setContactCallback(CollisionCallback callback);
 
 private:
     b2WorldId worldId_;
+    CollisionCallback contactCallback_;
+    
+    static bool contactBeginCallback(b2ShapeId shapeIdA, b2ShapeId shapeIdB, b2Manifold* manifold, void* context);
 };

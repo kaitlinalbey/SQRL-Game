@@ -15,12 +15,21 @@ void ControllerComponent::update(float dt) {
     if (body->getX() + body->getWidth() > screenWidth_) {
         body->setX(screenWidth_ - body->getWidth());
     }
+    
+    // Sync position to physics body if it exists
+    if (body->hasPhysicsBody()) {
+        body->syncToPhysics();
+    }
 }
 
 void ControllerComponent::moveLeft(float dt) {
     auto* body = owner_->getComponent<BodyComponent>();
     if (body) {
         body->setX(body->getX() - speed_ * dt);
+        // Sync to physics immediately for kinematic bodies
+        if (body->hasPhysicsBody()) {
+            body->syncToPhysics();
+        }
     }
 }
 
@@ -28,5 +37,9 @@ void ControllerComponent::moveRight(float dt) {
     auto* body = owner_->getComponent<BodyComponent>();
     if (body) {
         body->setX(body->getX() + speed_ * dt);
+        // Sync to physics immediately for kinematic bodies
+        if (body->hasPhysicsBody()) {
+            body->syncToPhysics();
+        }
     }
 }

@@ -16,7 +16,7 @@ void BodyComponent::update(float dt) {
     }
 }
 
-void BodyComponent::createPhysicsBody(PhysicsWorld* world, b2BodyType type) {
+void BodyComponent::createPhysicsBody(PhysicsWorld* world, b2BodyType type, float restitution, float gravityScale, float linearDamping) {
     if (!world || B2_IS_NON_NULL(physicsBodyId_)) return;
     
     physicsWorld_ = world;
@@ -26,6 +26,8 @@ void BodyComponent::createPhysicsBody(PhysicsWorld* world, b2BodyType type) {
     bodyDef.type = type;
     bodyDef.position = {x_, y_};
     bodyDef.rotation = b2Rot_identity;
+    bodyDef.gravityScale = gravityScale;
+    bodyDef.linearDamping = linearDamping;
     
     // Create the body in the physics world
     physicsBodyId_ = b2CreateBody(world->getWorldId(), &bodyDef);
@@ -37,7 +39,7 @@ void BodyComponent::createPhysicsBody(PhysicsWorld* world, b2BodyType type) {
     b2ShapeDef shapeDef = b2DefaultShapeDef();
     shapeDef.density = 1.0f;
     shapeDef.material.friction = 0.3f;
-    shapeDef.material.restitution = 0.5f;  // Bounciness
+    shapeDef.material.restitution = restitution;  // Bounciness (configurable)
     
     // Create the shape on the body
     b2CreatePolygonShape(physicsBodyId_, &shapeDef, &boxShape);

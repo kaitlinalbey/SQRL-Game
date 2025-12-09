@@ -27,7 +27,7 @@ public:
     void update(float dt) override;
 
     // Box2D physics integration
-    void createPhysicsBody(PhysicsWorld* world, b2BodyType type = b2_dynamicBody);
+    void createPhysicsBody(PhysicsWorld* world, b2BodyType type = b2_dynamicBody, float restitution = 0.5f, float gravityScale = 1.0f, float linearDamping = 0.0f);
     void destroyPhysicsBody();
     void syncFromPhysics();  // Copy physics position to visual position
     void syncToPhysics();    // Copy visual position to physics (for kinematic control)

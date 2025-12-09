@@ -7,6 +7,7 @@
 #include "Graphics.h"
 #include "Input.h"
 #include "View.h"
+#include "PhysicsWorld.h"
 
 class Game {
 public:
@@ -30,10 +31,12 @@ private:
     void createGameObjects();
     GameObject* spawnAcorn(float x, float y);
     void startLevel2();
+    void handleCollision(void* bodyA, void* bodyB);
 
     Graphics graphics_;
     Input input_;
     View view_;
+    PhysicsWorld physicsWorld_;
 
     std::unique_ptr<GameObject> squirrel_;
     std::vector<std::unique_ptr<GameObject>> acorns_;
